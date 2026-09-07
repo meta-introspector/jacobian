@@ -24,6 +24,9 @@ class WorkerTiming:
     worker_id: str
     call_seconds: float
     call_count: int
+    collection_seconds: float | None = None
+    setup_seconds: float | None = None
+    teardown_seconds: float | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +98,16 @@ def read_worker_timing(path: Path) -> tuple[float, tuple[WorkerTiming, ...]]:
                     raw_worker.get("call_seconds"), label="worker call_seconds"
                 ),
                 call_count=call_count,
+                **{
+                    name: _nonnegative_float(raw_worker[name], label=name)
+                    if name in raw_worker
+                    else None
+                    for name in (
+                        "collection_seconds",
+                        "setup_seconds",
+                        "teardown_seconds",
+                    )
+                },
             )
         )
     return wall_seconds, tuple(sorted(workers, key=lambda worker: worker.worker_id))
@@ -137,10 +150,22 @@ def write_summary(summary: TimingSummary, *, stream: TextIO) -> None:
             f"{worker.call_count} tests",
             file=stream,
         )
+        for label, seconds in (
+            ("collection (including test imports)", worker.collection_seconds),
+            ("setup", worker.setup_seconds),
+            ("teardown", worker.teardown_seconds),
+        ):
+            value = "unavailable" if seconds is None else f"{seconds:.3f}s"
+            print(f"    {label}: {value}", file=stream)
     print(
         "Non-call wall remainder: "
         f"{max(0.0, summary.wall_seconds - busiest.call_seconds):.3f}s "
         "(collection, setup/teardown, scheduling, and process overhead).",
+        file=stream,
+    )
+    print(
+        "Worker phases overlap across workers; do not add them to wall time. "
+        "The remainder is not a measurement of startup alone.",
         file=stream,
     )
 

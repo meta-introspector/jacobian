@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 import time
 from collections.abc import Iterable, Sequence
@@ -160,6 +161,7 @@ def _run(commands: Sequence[Sequence[str]], *, repository: Path) -> None:
     for index, command in enumerate(commands, start=1):
         print(f"[{index}/{len(commands)}] +", " ".join(command), flush=True)
         command_started = time.monotonic()
+        environment = _validation_environment()
         result = run_operator_command(
             command[0],
             command[1:],
@@ -171,12 +173,28 @@ def _run(commands: Sequence[Sequence[str]], *, repository: Path) -> None:
             ),
             stdout_limit_bytes=_VALIDATION_OUTPUT_LIMIT_BYTES,
             stderr_limit_bytes=_VALIDATION_OUTPUT_LIMIT_BYTES,
-            environment=_validation_environment(),
+            environment=environment,
             stdout_sink=output_sink(sys.stdout),
             stderr_sink=output_sink(sys.stderr),
         )
         elapsed = time.monotonic() - command_started
         if result.status is not ToolCommandStatus.EXITED or result.exit_code != 0:
+            overrides = [
+                f"{name}={environment[name]}"
+                for name in (
+                    "MATH_WORKERS",
+                    "PYTEST_ARGS",
+                    "PYTEST_DIAGNOSTIC_ARGS",
+                    "ALLOW_PARALLEL_VALIDATION",
+                )
+                if name in environment
+            ]
+            print(
+                f"Reproduce: cd {shlex.quote(str(repository))} && "
+                f"{shlex.join(('env', *overrides, *command))}",
+                file=sys.stderr,
+                flush=True,
+            )
             raise SystemExit(
                 f"[{index}/{len(commands)}] {' '.join(command)} failed after "
                 f"{elapsed:.1f}s: {result.diagnostic or result.status} "

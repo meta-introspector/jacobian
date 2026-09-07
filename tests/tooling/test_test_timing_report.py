@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 from types import ModuleType
 
+from tools import pytest_timing
+
 ROOT = Path(__file__).parents[2]
 
 
@@ -65,3 +67,30 @@ def test_junit_only_report_marks_worker_distribution_unavailable(
     reporter.write_summary(summary, stream=output)
 
     assert "Worker timing: unavailable" in output.getvalue()
+
+
+def test_phase_timing_round_trip_exposes_collection_and_fixture_costs(
+    tmp_path: Path,
+) -> None:
+    reporter = _load()
+    timing = tmp_path / "timing.json"
+    state = pytest_timing._TimingState(
+        call_seconds=5.0,
+        call_count=2,
+        collection_seconds=2.0,
+        setup_seconds=3.0,
+        teardown_seconds=1.0,
+    )
+    pytest_timing._write_timing(timing, state, wall_seconds=12.0)
+    wall, workers = reporter.read_worker_timing(timing)
+    output = StringIO()
+    reporter.write_summary(
+        reporter.TimingSummary(2, 9.0, (), wall, workers), stream=output
+    )
+    assert workers[0].collection_seconds == 2.0
+    assert workers[0].setup_seconds == 3.0
+    assert workers[0].teardown_seconds == 1.0
+    assert "collection (including test imports): 2.000s" in output.getvalue()
+    assert "setup: 3.000s" in output.getvalue()
+    assert "teardown: 1.000s" in output.getvalue()
+    assert "not a measurement of startup alone" in output.getvalue()

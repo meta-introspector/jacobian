@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import shlex
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -262,3 +263,33 @@ def test_failed_command_stops_the_plan(
         runner._run((("make", "test-math"), ("make", "test-catalog")), repository=ROOT)
     assert calls == ["make"]
     assert "Validation complete" not in capsys.readouterr().out
+
+
+def test_reproduction_preserves_quoted_selectors_and_overrides(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    runner = _load()
+    monkeypatch.setenv("MATH_WORKERS", "1")
+    monkeypatch.setenv("PYTEST_ARGS", "-k 'slow or exact'")
+    monkeypatch.setenv("PRIVATE_TOKEN", "not-for-output")
+
+    def fail(*args: object, **kwargs: object) -> ToolCommandResult:
+        return ToolCommandResult(
+            status=ToolCommandStatus.EXITED, exit_code=2, stdout=b"", stderr=b""
+        )
+
+    monkeypatch.setattr(runner, "run_operator_command", fail)
+    repository = tmp_path / "checkout with spaces"
+    command = ("make", "test-math", "TESTS=tests/math/a.py tests/math/b.py")
+    with pytest.raises(SystemExit):
+        runner._run((command,), repository=repository)
+    diagnostic = capsys.readouterr().err
+    reproduction = diagnostic.split("Reproduce: ", 1)[1].strip()
+    tokens = shlex.split(reproduction)
+    assert tokens[:4] == ["cd", str(repository), "&&", "env"]
+    assert tokens[-3:] == list(command)
+    assert "MATH_WORKERS=1" in tokens
+    assert "PYTEST_ARGS=-k 'slow or exact'" in tokens
+    assert "not-for-output" not in diagnostic

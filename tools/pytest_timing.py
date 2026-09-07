@@ -16,7 +16,10 @@ class _TimingState:
     started: float = field(default_factory=time.monotonic)
     call_seconds: float = 0.0
     call_count: int = 0
-    workers: dict[str, tuple[float, int]] = field(default_factory=dict)
+    collection_seconds: float = 0.0
+    setup_seconds: float = 0.0
+    teardown_seconds: float = 0.0
+    workers: dict[str, dict[str, Any]] = field(default_factory=dict)
 
 
 _TIMING_STATE = pytest.StashKey[_TimingState]()
@@ -35,14 +38,28 @@ def pytest_configure(config: pytest.Config) -> None:
 
 
 @pytest.hookimpl(hookwrapper=True)
+def pytest_collection(session: pytest.Session) -> Any:
+    started = time.monotonic()
+    try:
+        yield
+    finally:
+        session.config.stash[_TIMING_STATE].collection_seconds += (
+            time.monotonic() - started
+        )
+
+
+@pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[object]) -> Any:
     outcome = yield
     report: pytest.TestReport = outcome.get_result()
-    if report.when != "call":
-        return
     state = item.config.stash[_TIMING_STATE]
-    state.call_seconds += report.duration
-    state.call_count += 1
+    if report.when == "call":
+        state.call_seconds += report.duration
+        state.call_count += 1
+    elif report.when == "setup":
+        state.setup_seconds += report.duration
+    elif report.when == "teardown":
+        state.teardown_seconds += report.duration
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -56,6 +73,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
             "id": workerinput["workerid"],
             "call_seconds": state.call_seconds,
             "call_count": state.call_count,
+            "collection_seconds": state.collection_seconds,
+            "setup_seconds": state.setup_seconds,
+            "teardown_seconds": state.teardown_seconds,
         }
         return
     output = config.getoption("jacobian_timing_json")
@@ -86,25 +106,21 @@ def pytest_testnodedown(node: Any, error: BaseException | None) -> None:
         or not isinstance(call_count, int)
     ):
         return
-    state.workers[worker_id] = (call_seconds, call_count)
+    state.workers[worker_id] = timing
 
 
 def _write_timing(path: Path, state: _TimingState, *, wall_seconds: float) -> None:
     workers = (
-        tuple(
-            {
-                "id": worker_id,
-                "call_seconds": call_seconds,
-                "call_count": call_count,
-            }
-            for worker_id, (call_seconds, call_count) in sorted(state.workers.items())
-        )
+        tuple(timing for _, timing in sorted(state.workers.items()))
         if state.workers
         else (
             {
                 "id": "local",
                 "call_seconds": state.call_seconds,
                 "call_count": state.call_count,
+                "collection_seconds": state.collection_seconds,
+                "setup_seconds": state.setup_seconds,
+                "teardown_seconds": state.teardown_seconds,
             },
         )
     )
