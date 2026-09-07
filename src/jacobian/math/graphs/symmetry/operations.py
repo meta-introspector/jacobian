@@ -6,10 +6,15 @@ import unicodedata
 
 from pydantic_core import PydanticCustomError
 
-from jacobian.catalog.models import OperationDomainValidationError
+from jacobian._execution import request_checkpoint
+from jacobian.catalog.models import (
+    OperationDomainValidationError,
+    OperationResourceAdmissionError,
+)
 from jacobian.math.graphs.symmetry._models import (
     _UNCOLORED,
     MAX_GRAPH_SYMMETRY_EDGES,
+    MAX_GRAPH_SYMMETRY_GENERATORS,
     MAX_GRAPH_SYMMETRY_VERTICES,
     GraphAutomorphismGenerator,
     GraphEdgeOrbit,
@@ -28,6 +33,25 @@ def _admit_graph_symmetry_orbit(
     """Admit graph, generator, and retained-result execution bounds."""
     vertices = graph.graph.vertices
     edges = graph.graph.edges
+    if len(generators) > MAX_GRAPH_SYMMETRY_GENERATORS:
+        raise OperationResourceAdmissionError(
+            location=("generators",),
+            code="graph.symmetry.generator_bound",
+            message="declared symmetry admits at most 64 generators",
+        )
+    # Preserve the old worst-case action-table envelope while admitting
+    # larger graphs with fewer generators. No group elements are enumerated.
+    action_entries = len(generators) * (len(vertices) + len(edges))
+    # Orbit members partition the bounded vertex/edge carriers. There is at
+    # most one representative and orbit record per carrier element, so the
+    # result cardinality is linear even for the trivial group.
+    if action_entries > 64 * (4096 + 256):
+        raise OperationResourceAdmissionError(
+            location=("generators",),
+            code="graph.symmetry.work_bound",
+            message=f"symmetry action entries={action_entries}; limit 278528",
+        )
+    request_checkpoint("before declared graph symmetry checking")
     try:
         if len(vertices) > MAX_GRAPH_SYMMETRY_VERTICES:
             raise PydanticCustomError(
@@ -66,6 +90,7 @@ def _admit_graph_symmetry_orbit(
             else dict.fromkeys(edges, _UNCOLORED)
         )
         for generator in generators:
+            request_checkpoint("during declared graph symmetry checking")
             _validate_automorphism_generator(
                 generator,
                 vertices,

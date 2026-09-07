@@ -2,8 +2,19 @@
 
 from __future__ import annotations
 
+from pydantic_core import PydanticCustomError
+
+from jacobian._execution import request_checkpoint
+from jacobian.catalog.models import (
+    OperationDomainValidationError,
+    OperationResourceAdmissionError,
+)
 from jacobian.math.graphs.clique_partition._models import (
+    MAX_PARTITION_PAIR_WORK,
+    MAX_PARTITION_PARTS,
+    MAX_PARTITION_VERTEX_REFERENCES,
     EdgeCliquePartitionResult,
+    _require_well_formed_parts,
 )
 from jacobian.math.graphs.values import SimpleUndirectedGraph
 
@@ -23,9 +34,48 @@ def check_edge_clique_partition(
     adjacency-set lookup.
     """
 
-    adjacency: dict[str, frozenset[str]] = {
-        vertex: frozenset() for vertex in graph.vertices
-    }
+    _admit_partition(graph, parts)
+    return _check_partition(graph, parts)
+
+
+def _admit_partition(
+    graph: SimpleUndirectedGraph, parts: tuple[tuple[str, ...], ...]
+) -> None:
+    # Count tuple lengths before per-member validation or set allocation.
+    if isinstance(parts, tuple) and len(parts) > MAX_PARTITION_PARTS:
+        raise OperationResourceAdmissionError(
+            location=("parts",),
+            code="graph.clique_partition.too_many_parts",
+            message=f"edge-clique partitions admit at most {MAX_PARTITION_PARTS} parts",
+        )
+    if isinstance(parts, tuple) and all(isinstance(part, tuple) for part in parts):
+        references = sum(map(len, parts))
+        pair_work = sum(len(part) * (len(part) - 1) // 2 for part in parts)
+        if (
+            references > MAX_PARTITION_VERTEX_REFERENCES
+            or pair_work > MAX_PARTITION_PAIR_WORK
+        ):
+            raise OperationResourceAdmissionError(
+                location=("parts",),
+                code="graph.clique_partition.work_bound",
+                message=f"partition references={references}, pair_work={pair_work}; limits {MAX_PARTITION_VERTEX_REFERENCES}, {MAX_PARTITION_PAIR_WORK}",
+            )
+    # Structural validation also protects callers of the native function.
+    try:
+        _require_well_formed_parts(graph, parts)
+    except PydanticCustomError as error:
+        raise OperationDomainValidationError(
+            location=("parts",), code=error.type, message=str(error)
+        ) from error
+    # The result retains the bounded graph and supplied references, plus at
+    # most one covering index per part. Label lengths belong to the carrier;
+    # transport encoding does not determine mathematical admission.
+    request_checkpoint("before edge-clique partition checking")
+
+
+def _check_partition(
+    graph: SimpleUndirectedGraph, parts: tuple[tuple[str, ...], ...]
+) -> EdgeCliquePartitionResult:
     neighbors: dict[str, set[str]] = {vertex: set() for vertex in graph.vertices}
     for left, right in graph.edges:
         neighbors[left].add(right)
@@ -33,6 +83,7 @@ def check_edge_clique_partition(
     adjacency = {vertex: frozenset(peers) for vertex, peers in neighbors.items()}
 
     for index, part in enumerate(parts):
+        request_checkpoint("during edge-clique partition checking")
         members = list(part)
         for left_position in range(len(members)):
             for right_position in range(left_position + 1, len(members)):
@@ -49,6 +100,7 @@ def check_edge_clique_partition(
 
     coverage: dict[tuple[str, str], list[int]] = {edge: [] for edge in graph.edges}
     for index, part in enumerate(parts):
+        request_checkpoint("during edge-clique partition coverage")
         members = list(part)
         for left_position in range(len(members)):
             for right_position in range(left_position + 1, len(members)):
