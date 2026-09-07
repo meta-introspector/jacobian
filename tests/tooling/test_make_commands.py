@@ -58,7 +58,7 @@ def test_affected_validation_is_a_public_planner_backed_default() -> None:
     makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
     contracts = (ROOT / "tools" / "command_contract.py").read_text(encoding="utf-8")
 
-    assert "affected: ## Default local validation:" in makefile
+    assert "affected: ## Final-tree validation:" in makefile
     assert "affected-plan: ## Show the CI-planned" in makefile
     assert 'python tools/affected_validation.py --base "$(AFFECTED_BASE)"' in makefile
     assert 'name="affected"' in contracts

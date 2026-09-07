@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+import time
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
@@ -16,6 +17,7 @@ from tools.ci_test_plan import TestPlan, build_plan  # noqa: E402
 from tools.command_runner import (  # noqa: E402
     ToolCommandStatus,
     operator_environment,
+    output_sink,
     run_operator_command,
 )
 
@@ -154,8 +156,10 @@ def commands_for_plan(
 
 
 def _run(commands: Sequence[Sequence[str]], *, repository: Path) -> None:
-    for command in commands:
-        print("+", " ".join(command), flush=True)
+    started = time.monotonic()
+    for index, command in enumerate(commands, start=1):
+        print(f"[{index}/{len(commands)}] +", " ".join(command), flush=True)
+        command_started = time.monotonic()
         result = run_operator_command(
             command[0],
             command[1:],
@@ -168,15 +172,22 @@ def _run(commands: Sequence[Sequence[str]], *, repository: Path) -> None:
             stdout_limit_bytes=_VALIDATION_OUTPUT_LIMIT_BYTES,
             stderr_limit_bytes=_VALIDATION_OUTPUT_LIMIT_BYTES,
             environment=_validation_environment(),
+            stdout_sink=output_sink(sys.stdout),
+            stderr_sink=output_sink(sys.stderr),
         )
-        if result.stdout:
-            sys.stdout.write(result.stdout.decode("utf-8", "replace"))
-        if result.stderr:
-            sys.stderr.write(result.stderr.decode("utf-8", "replace"))
+        elapsed = time.monotonic() - command_started
         if result.status is not ToolCommandStatus.EXITED or result.exit_code != 0:
             raise SystemExit(
-                result.diagnostic or f"{' '.join(command)} failed with {result.status}"
+                f"[{index}/{len(commands)}] {' '.join(command)} failed after "
+                f"{elapsed:.1f}s: {result.diagnostic or result.status} "
+                f"(exit code {result.exit_code})"
             )
+        print(f"[{index}/{len(commands)}] passed in {elapsed:.1f}s", flush=True)
+    print(
+        f"Validation complete: {len(commands)} commands passed in "
+        f"{time.monotonic() - started:.1f}s.",
+        flush=True,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+from collections.abc import Callable
 from pathlib import Path
 from types import ModuleType
 
@@ -203,11 +204,19 @@ def test_selected_commands_use_the_bounded_operator_runner(
         stdout_limit_bytes: int,
         stderr_limit_bytes: int,
         environment: dict[str, str],
+        stdout_sink: Callable[[bytes], None],
+        stderr_sink: Callable[[bytes], None],
     ) -> ToolCommandResult:
         assert environment["PATH"]
         assert environment["MATH_WORKERS"] == "2"
         assert stdout_limit_bytes == stderr_limit_bytes == 64 * 1024 * 1024
         observed.append((command, arguments, cwd, timeout_seconds))
+        stdout_sink(b"selected output\n")
+        stderr_sink(b"selected diagnostics\n")
+        live = capsys.readouterr()
+        assert "[1/1] + make test-math" in live.out
+        assert "selected output" in live.out
+        assert "selected diagnostics" in live.err
         return ToolCommandResult(
             status=ToolCommandStatus.EXITED,
             exit_code=0,
@@ -221,5 +230,35 @@ def test_selected_commands_use_the_bounded_operator_runner(
 
     assert observed == [("make", ("test-math",), ROOT, 30 * 60)]
     captured = capsys.readouterr()
-    assert "selected output" in captured.out
-    assert "selected diagnostics" in captured.err
+    assert "selected output" not in captured.out
+    assert "selected diagnostics" not in captured.err
+    assert "[1/1] passed in" in captured.out
+    assert "Validation complete: 1 commands passed" in captured.out
+
+
+@pytest.mark.parametrize(
+    ("status", "exit_code"),
+    [(ToolCommandStatus.EXITED, 2), (ToolCommandStatus.TIMED_OUT, None)],
+)
+def test_failed_command_stops_the_plan(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    status: ToolCommandStatus,
+    exit_code: int | None,
+) -> None:
+    runner = _load()
+    calls = []
+
+    def run_operator(
+        command: str, arguments: object, **kwargs: object
+    ) -> ToolCommandResult:
+        calls.append(command)
+        return ToolCommandResult(
+            status=status, exit_code=exit_code, stdout=b"", stderr=b""
+        )
+
+    monkeypatch.setattr(runner, "run_operator_command", run_operator)
+    with pytest.raises(SystemExit, match="make test-math failed after"):
+        runner._run((("make", "test-math"), ("make", "test-catalog")), repository=ROOT)
+    assert calls == ["make"]
+    assert "Validation complete" not in capsys.readouterr().out

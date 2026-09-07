@@ -47,20 +47,30 @@ new review artifact or framework. The
 and [backend contract](docs/reference/mathematical-backends.md#common-adapter-obligations)
 define these checks.
 
-For code changes, run CI-planned affected validation on the final tree:
+During edits, run the changed owner's tests first, including relevant composition
+tests when the change crosses owners. Use the existing focused commands:
+
+```sh
+make test-focused LANE=tooling TESTS=tests/tooling/test_affected_validation.py
+make quick-scoped LANE=tooling TESTS=tests/tooling/test_affected_validation.py PATHS="tools/affected_validation.py tests/tooling/test_affected_validation.py"
+```
+
+Before sharing a code change, run CI-planned affected validation on the final tree:
 
 ```sh
 make affected AFFECTED_BASE=origin/main
 ```
 
 `make affected` uses the same checked-in planner as pull-request CI. Use
-`make affected-plan` to inspect its selection without running it. Choose a
-different command only when the change or current question fits one of these
-cases:
+`make affected-plan` to inspect its selection without running it. The plan includes
+all branch and local changes, so earlier shared-runtime edits can still select
+the full suite. Do not repeat that branch-wide gate after every small edit;
+focused checks are the normal edit loop, not a substitute for final evidence.
+Commands for each stage:
 
 | Situation | Command |
 | --- | --- |
-| One-owner edit loop with unrelated static drift | `make handoff-scoped LANE=... TESTS=... PATHS="..."` |
+| One-owner edit loop | `make test-focused LANE=... TESTS=...` or `make quick-scoped LANE=... TESTS=... PATHS="..."` |
 | A changed process, MCP, Singular, or QEPCAD boundary | Add its named `make test-*` lane; shared process-runner changes need both runtime suites |
 | Documentation | `make docs-linkcheck` |
 | Broad ordinary validation requested or needed for cross-cutting evidence | `make check` once on the frozen tree |

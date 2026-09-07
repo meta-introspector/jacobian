@@ -172,6 +172,8 @@ def run_operator_command(
     stdout_limit_bytes: int = 4 * 1024 * 1024,
     stderr_limit_bytes: int = 4 * 1024 * 1024,
     environment: Mapping[str, str] | None = None,
+    stdout_sink: Callable[[bytes], None] | None = None,
+    stderr_sink: Callable[[bytes], None] | None = None,
 ) -> ToolCommandResult:
     """Resolve and execute one operator-installed command under tooling policy."""
 
@@ -192,6 +194,8 @@ def run_operator_command(
         timeout_seconds=timeout_seconds,
         stdout_limit_bytes=stdout_limit_bytes,
         stderr_limit_bytes=stderr_limit_bytes,
+        stdout_sink=stdout_sink,
+        stderr_sink=stderr_sink,
     )
     return run_tool_command(request)
 

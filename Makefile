@@ -2,7 +2,7 @@
 
 UV_RUN := uv run --locked
 PYTEST_ARGS ?=
-MATH_WORKERS ?= 1
+MATH_WORKERS ?= 2
 export MATH_WORKERS
 SCALE_WORKERS ?= 2
 TESTS ?=
@@ -24,7 +24,7 @@ VALIDATION_LOCK := $(UV_RUN) python tools/with_validation_lock.py
 # them independently; `make check-all` reproduces them locally in this order.
 ORDINARY_TEST_LANES := math catalog dispatch cli tooling integration
 FOCUSED_TEST_LANES := $(ORDINARY_TEST_LANES) process mcp
-PUBLIC_COMMANDS := setup affected handoff-scoped test-focused quick-scoped affected-plan test-timings check check-all fix
+PUBLIC_COMMANDS := setup test-focused quick-scoped handoff-scoped affected-plan affected test-timings check check-all fix
 
 include make/development.mk
 include make/harbor.mk
@@ -41,7 +41,7 @@ help: ## Show the primary developer workflow.
 help-all: ## Show every low-level and lifecycle developer command.
 	@awk 'BEGIN {FS = ":.*## "; printf "All Jacobian developer commands:\n\n"} /^[a-zA-Z0-9_-]+:.*## / {printf "  %-26s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 
-test-math: ## Ordinary math; MATH_WORKERS=2 opts into parallelism, 1 is conservative, 0 runs in-process.
+test-math: ## Ordinary math; defaults to 2 workers, MATH_WORKERS=1 is conservative, 0 runs in-process.
 	$(UV_RUN) pytest -n $(MATH_WORKERS) --dist worksteal --timeout=120 \
 		-m "$(ORDINARY_MARKER_EXPRESSION)" $(if $(TESTS),$(TESTS),tests/math) \
 		$(PYTEST_DIAGNOSTIC_ARGS) $(PYTEST_ARGS)
@@ -82,7 +82,7 @@ test-focused: ## Run TESTS through its explicit semantic LANE (for example, LANE
 		echo "LANE must be one of: $(FOCUSED_TEST_LANES)" >&2; exit 2;; esac
 	$(MAKE) test-$(LANE) TESTS="$(TESTS)" PYTEST_ARGS="$(PYTEST_ARGS)"
 
-affected: ## Default local validation: CI-planned affected owners and scoped static checks.
+affected: ## Final-tree validation: CI-planned affected owners and scoped static checks.
 	$(UV_RUN) python tools/affected_validation.py --base "$(AFFECTED_BASE)"
 
 affected-plan: ## Show the CI-planned local validation selected from AFFECTED_BASE...HEAD.

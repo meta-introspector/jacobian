@@ -6,7 +6,12 @@ Tests prove one observable mathematical or transport contract at a time.
 
 ## Routine validation
 
-Run planner-selected affected validation before sharing a code change:
+During edits, use `make test-focused LANE=... TESTS=...` for the changed owner
+and relevant composition tests. Use `make quick-scoped` with explicit `PATHS`
+when scoped Ruff checks are also useful. These existing commands are the normal
+edit loop; do not rerun the complete branch plan after every small change.
+
+Run planner-selected affected validation on the final tree before sharing a code change:
 
 ```sh
 make setup
@@ -17,8 +22,12 @@ make affected AFFECTED_BASE=origin/main
 untracked paths, then uses the checked-in pull-request planner to run only the
 selected owner, catalog, and boundary lanes. Ruff and mypy run only on changed
 Python files in their normal repository scopes. It
-prints the immutable plan and its reasons before execution; `make affected-plan`
-prints that selection without running it. Installed-wheel evidence remains
+prints the immutable plan and its reasons before execution, streams each command's
+stdout and stderr, and reports per-command elapsed time and a final success summary.
+Failures stop execution and identify the command, status, and exit code.
+`make affected-plan` prints the selection without running it. Earlier shared-runtime
+changes on the branch can still select broad lanes; focused edit-loop checks do
+not narrow the final plan. Installed-wheel evidence remains
 CI-owned. For a deliberately narrower one-owner loop, use `make handoff-scoped`
 with explicit `PATHS`. Add the narrowest named boundary lane when a change
 crosses its real boundary:
@@ -41,16 +50,16 @@ lane preserves its configured timeout and worker count. Supported
 focused lanes are `math`, `catalog`, `dispatch`, `cli`, `tooling`,
 `integration`, `process`, and `mcp`; Singular and QEPCAD retain dedicated commands.
 
-The math lane defaults to one worker. On a host with spare CPU and memory,
-use `make test-math MATH_WORKERS=2` or `make affected MATH_WORKERS=2` to opt
-into bounded parallel execution. The setting also reaches focused math commands
+The local math lane defaults to two workers. Override `MATH_WORKERS` on
+`make test-math` or `make affected` to suit the host's CPU and memory budget.
+The setting also reaches focused math commands
 and preserves their selectors, markers, and timeout. Use `MATH_WORKERS=1` for
 the conservative isolated-worker path, or `MATH_WORKERS=0` to run in the main
 process, which can avoid worker startup for a small focused test. Each extra
 worker collects the suite and imports its backends separately; account for
 concurrent solver children and exact intermediates as well as worker memory.
 Do not derive a worker count from CPU count alone. Hosted math shards retain
-the one-worker default because each shard already has its own runner.
+their separate one-worker configuration because each shard already has its own runner.
 
 In a shared checkout with unrelated static drift, declare the source and test
 paths you own instead of waiting on unrelated files:
