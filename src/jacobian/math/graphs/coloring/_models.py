@@ -373,6 +373,11 @@ class PrecoloringEdgeRepairResult(StrictModel):
                 "graph.precoloring_fixed_colors_must_assign_one_color_per_vertex",
                 "fixed_colors must assign one color per vertex",
             )
+        if tuple(sorted(result_vertices)) != result_vertices:
+            raise PydanticCustomError(
+                "graph.precoloring_fixed_colors_must_be_strictly_increasing",
+                "fixed_colors must use strictly increasing source vertices",
+            )
         if any(
             vertex < 0 or vertex >= self.graph.vertex_count
             for vertex, _ in self.fixed_colors

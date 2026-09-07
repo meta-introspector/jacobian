@@ -154,6 +154,7 @@ def _result_with_fixed_colors(
         (((0, 0), (0, 0)), "one color per vertex"),
         (((7, 0),), "source graph axis"),
         (((0, 5),), "0..colors-1"),
+        (((1, 0), (0, 0)), "strictly increasing"),
     ],
 )
 def test_result_fixed_precolouring_context_fails_closed(
@@ -214,21 +215,29 @@ def test_native_fixed_precolouring_admission_matches_wire_envelope(
     assert error.value.errors()[0]["type"] == code
 
 
-def _incumbent_only_optimizer(
-    monkeypatch: pytest.MonkeyPatch, upper_bound: int
+def _scripted_optimizer(
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    lower_bound: int,
+    upper_bound: int,
+    color_values: dict[str, int],
+    objective_value: int,
 ) -> None:
     import z3
 
-    class IncumbentOnlyOptimize:
+    scripted_objective: list[object] = []
+
+    class ScriptedOptimize:
         def set(self, *_args: object, **_kwargs: object) -> None:
             pass
 
         def add(self, *_constraints: object) -> None:
             pass
 
-        def minimize(self, _objective: object) -> object:
+        def minimize(self, objective: object) -> object:
+            scripted_objective.append(objective)
             return SimpleNamespace(
-                lower=lambda: z3.IntVal(0),
+                lower=lambda: z3.IntVal(lower_bound),
                 upper=lambda: z3.IntVal(upper_bound),
             )
 
@@ -236,18 +245,29 @@ def _incumbent_only_optimizer(
             return z3.sat
 
         def model(self) -> object:
-            return SimpleNamespace(eval=lambda _variable, **_kwargs: z3.IntVal(0))
+            def evaluate(expression: object, **_kwargs: object) -> object:
+                if scripted_objective and expression is scripted_objective[0]:
+                    return z3.IntVal(objective_value)
+                return z3.IntVal(color_values[str(expression)])
+
+            return SimpleNamespace(eval=evaluate)
 
         def reason_unknown(self) -> str:
             return "max-conflicts-reached"
 
-    monkeypatch.setattr(z3, "Optimize", IncumbentOnlyOptimize)
+    monkeypatch.setattr(z3, "Optimize", ScriptedOptimize)
 
 
 def test_interrupted_optimization_is_not_optimal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _incumbent_only_optimizer(monkeypatch, upper_bound=2)
+    _scripted_optimizer(
+        monkeypatch,
+        lower_bound=0,
+        upper_bound=2,
+        color_values={"color_0": 0, "color_1": 0},
+        objective_value=1,
+    )
 
     outcome, coloring = run_precoloring_edge_repair_solver_kernel(
         IndexedSimpleUndirectedGraph(vertex_count=2, edges=((0, 1),)),
@@ -263,7 +283,13 @@ def test_interrupted_optimization_is_not_optimal(
 def test_proven_bounds_establish_optimal(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    _incumbent_only_optimizer(monkeypatch, upper_bound=0)
+    _scripted_optimizer(
+        monkeypatch,
+        lower_bound=0,
+        upper_bound=0,
+        color_values={"color_0": 0, "color_1": 1},
+        objective_value=0,
+    )
 
     outcome, coloring = run_precoloring_edge_repair_solver_kernel(
         IndexedSimpleUndirectedGraph(vertex_count=2, edges=((0, 1),)),
@@ -273,4 +299,26 @@ def test_proven_bounds_establish_optimal(
     )
 
     assert outcome == "optimal"
-    assert coloring == (0, 0)
+    assert coloring == (0, 1)
+
+
+def test_model_disagreeing_with_proven_bound_is_not_optimal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _scripted_optimizer(
+        monkeypatch,
+        lower_bound=0,
+        upper_bound=0,
+        color_values={"color_0": 0, "color_1": 0},
+        objective_value=1,
+    )
+
+    outcome, coloring = run_precoloring_edge_repair_solver_kernel(
+        IndexedSimpleUndirectedGraph(vertex_count=2, edges=((0, 1),)),
+        2,
+        (),
+        10,
+    )
+
+    assert outcome == "budget_exceeded"
+    assert coloring is None
