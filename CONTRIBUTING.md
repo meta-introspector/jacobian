@@ -101,8 +101,9 @@ Run `make hooks` once to install commit-time formatting, syntax, secret,
 large-file, dead-code, and actionlint hooks plus the static
 `make lint typecheck` pre-push gate. `make fix` applies Ruff's safe lint fixes
 followed by formatting; `make precommit` then runs the broad ordinary gate.
-Use `make affected` for branch validation or `make handoff LANE=... TESTS=...`
-for a focused owner check.
+Use `make affected` for final branch validation. Despite their names, `make
+handoff LANE=... TESTS=...` and `make handoff-scoped` check only one declared
+owner path alongside static checks; neither replaces the final affected plan.
 Hooks remain bypassable for exceptional cases with Git's standard `--no-verify`
 option.
 

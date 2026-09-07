@@ -6,6 +6,11 @@ Tests prove one observable mathematical or transport contract at a time.
 
 ## Routine validation
 
+`test-focused`, `quick-scoped`, and `handoff-scoped` serve the edit loop.
+The `handoff` commands add static checks to one declared owner test path;
+their names do not imply complete branch evidence. Use `make affected` for
+final branch validation.
+
 During edits, use `make test-focused LANE=... TESTS=...` for the changed owner
 and relevant composition tests. Use `make quick-scoped` with explicit `PATHS`
 when scoped Ruff checks are also useful. These existing commands are the normal

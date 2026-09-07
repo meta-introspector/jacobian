@@ -70,12 +70,12 @@ test-tooling: ## Repository tooling and static contracts (2 workers, 30s).
 		$(if $(TESTS),$(TESTS),tests/tooling) \
 		$(PYTEST_DIAGNOSTIC_ARGS) $(PYTEST_ARGS)
 
-test-integration: ## Ordinary cross-owner mathematical seams (2 workers, 120s).
+test-integration: ## Ordinary cross-owner mathematical seams (1 worker, 120s).
 	$(UV_RUN) pytest -n 1 --dist worksteal --timeout=120 -m "$(ORDINARY_MARKER_EXPRESSION)" \
 		$(if $(TESTS),$(TESTS),tests/integration --ignore=tests/integration/catalog) \
 		$(PYTEST_DIAGNOSTIC_ARGS) $(PYTEST_ARGS)
 
-test-focused: ## Run TESTS through its explicit semantic LANE (for example, LANE=math).
+test-focused: ## Edit loop: run explicit TESTS through its semantic LANE (for example, LANE=math).
 	@test -n "$(LANE)" || { echo "LANE is required, e.g. LANE=math" >&2; exit 2; }
 	@test -n "$(TESTS)" || { echo "TESTS is required, e.g. TESTS=tests/math/..." >&2; exit 2; }
 	@case " $(FOCUSED_TEST_LANES) " in *" $(LANE) "*) ;; *) \
@@ -226,9 +226,9 @@ build: ## Build Python source and wheel distributions.
 	uv build
 	$(UV_RUN) python tools/check_wheel_contents.py
 
-handoff: lint typecheck test-focused ## Focused contributor handoff: lint, types, and one declared owner path.
+handoff: lint typecheck test-focused ## Lint, types, and one owner path; use affected for final branch validation.
 
-handoff-scoped: lint-scoped typecheck-scoped test-focused ## Focused handoff scoped to declared static PATHS and one owner test path.
+handoff-scoped: lint-scoped typecheck-scoped test-focused ## Scoped lint, types, and one owner path; not final branch validation.
 
 quick: lint test-focused ## Broad Ruff checks plus one declared owner test path.
 
