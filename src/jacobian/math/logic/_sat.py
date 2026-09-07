@@ -248,6 +248,8 @@ def _run_sat_worker(request: SatSolveRequest) -> SatSolveResult:
                 SatAssignmentCheckRequest(cnf=request.cnf, assignment=result.assignment)
             ).satisfies
         ):
+            # The parent-side scan may have consumed the remaining budget.
+            _require_execution_deadline(deadline, "after SAT assignment check")
             return _result(
                 request,
                 outcome="UNKNOWN",

@@ -284,6 +284,33 @@ def test_sat_solver_does_not_promote_a_malformed_backend_model(
     )
 
 
+def test_sat_solver_invalid_model_cannot_outlive_request_deadline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from jacobian.math.logic._cnf import SatAssignmentCheckResult
+    from jacobian.math.logic._cnf import check_sat_assignment as original_check
+
+    monkeypatch.setattr(
+        sat,
+        "run_bounded_process",
+        lambda *_args, **_kwargs: _sat_worker_result(
+            stdout=b'{"outcome":"SAT","assignment":[false],"exhausted":null,"detail":null}'
+        ),
+    )
+
+    real_monotonic = sat.time.monotonic
+
+    def expiring_check(request: SatAssignmentCheckRequest) -> SatAssignmentCheckResult:
+        # Model the parent-side assignment scan consuming the remaining budget.
+        monkeypatch.setattr(sat.time, "monotonic", lambda: real_monotonic() + 3_600.0)
+        return original_check(request)
+
+    monkeypatch.setattr(sat, "check_sat_assignment", expiring_check)
+
+    with pytest.raises(OperationExecutionTimeoutError, match="deadline expired"):
+        solve_sat(SatSolveRequest(cnf=CanonicalCnf(variables=("x",), clauses=((1,),))))
+
+
 def test_smt_solver_does_not_promote_a_malformed_backend_model(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
