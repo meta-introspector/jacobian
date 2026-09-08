@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from typing import Annotated, Self
 
-from pydantic import Field, StrictInt, model_validator
+from pydantic import Field, StrictInt, WithJsonSchema, model_validator
 from pydantic_core import PydanticCustomError
 
+from jacobian._exact import MAX_CANONICAL_INTEGER_DIGITS, ExactInteger
 from jacobian._models import StrictModel
 from jacobian.math.combinatorics.codes.linear.values import PrimeFieldLinearEncoder
 
@@ -19,8 +20,15 @@ MAX_COVERING_RADIUS_STATES_PER_PASS = 65_536
 MAX_COVERING_RADIUS_TRANSITIONS = 2_000_000
 
 _WeightCount = Annotated[
-    StrictInt,
-    Field(ge=1, le=MAX_EXACT_CODEWORD_EVALUATIONS),
+    ExactInteger,
+    Field(ge=1),
+    WithJsonSchema(
+        {
+            "type": "string",
+            "pattern": rf"^[1-9][0-9]{{0,{MAX_CANONICAL_INTEGER_DIGITS - 1}}}(?![\s\S])",
+            "maxLength": MAX_CANONICAL_INTEGER_DIGITS,
+        }
+    ),
 ]
 
 
