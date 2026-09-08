@@ -3,10 +3,15 @@
 from collections import Counter
 from itertools import combinations
 
+from jacobian._execution import request_checkpoint
 from jacobian.math.combinatorics.designs.incidence_structures._models import (
     IncidenceMomentComparison,
     IncidenceMultiplicityDifference,
     IncidenceStructure,
+    _containment_axes,
+)
+from jacobian.math.combinatorics.finite_structures.hypergraphs._models import (
+    FiniteHypergraph,
 )
 
 type _SubsetProfile = tuple[tuple[tuple[str, ...], int], ...]
@@ -17,13 +22,14 @@ type ContainmentProfileData = tuple[
 
 
 def containment_profile_data(
-    incidence: IncidenceStructure, order: int
+    incidence: IncidenceStructure | FiniteHypergraph, order: int
 ) -> ContainmentProfileData:
     """Return one complete fixed-order multiplicity profile."""
 
-    points = incidence.points
+    points, blocks = _containment_axes(incidence)
     counts: Counter[tuple[str, ...]] = Counter()
-    for block in incidence.blocks:
+    for block in blocks:
+        request_checkpoint("during containment profile enumeration")
         block_members = set(block)
         counts.update(
             combinations(
