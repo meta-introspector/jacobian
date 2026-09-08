@@ -19,24 +19,34 @@ sections. The installed catalog owns current operation membership.
 
 ## Contributor quick path
 
-For mathematical changes, review three things before merging:
+For mathematical changes, establish these four pieces of evidence before merging:
 
-1. **Independent correctness evidence:** state the defining identity, its
-   conventions, and a test that breaks a plausible wrong implementation.
-2. **The complete execution path:** identify who establishes each invariant,
-   where candidates become trusted results, and what work or expansion repeats.
-3. **A useful accepted boundary:** demonstrate a representative valid request
-   as well as an excessive request that is rejected. Rejection tests alone do
-   not establish that an operation remains usable.
-4. **Serialization and composition:** identify the one domain-owned type for
-   every reusable value, including its parent and empty axes. Check that parsing
-   is structural, mathematical admission happens once at the owning operation,
-   and every consumer explicitly checks any caller-authored claim it relies on.
+1. **Reproduce the caller's case.** Keep the motivating request and expected
+   mathematical result. For a scale repair, make that request succeed and retain
+   a representative larger accepted case; rejection tests alone are insufficient.
+2. **Trace the complete contract.** Follow request parsing → native admission →
+   kernel → result construction → JSON → consumer. Identify the owner of each
+   invariant and limit. Canonical values retain the ring, dimensions, and axes;
+   operation budgets separately bound computation. Check both native and public
+   invocation paths when they differ.
+3. **Check the mathematics independently.** Use a defining identity, a bounded
+   reference computation, or inputs with independently known answers. Include a
+   case that distinguishes plausible wrong algorithms, such as negative or
+   singular matrices when changing inertia. Reusing the producer's kernel as
+   the only oracle does not establish correctness.
+4. **Test the new boundary through its consumer.** Serialize the actual newly
+   accepted result, decode it, and pass it unchanged to its real consumer when
+   one exists. Include the relevant empty or degenerate case. Check schema and
+   decoder agreement for changed wire fields, and preserve typed resource
+   refusal through every wrapper and claim checker.
 
 For an admission or scale defect, scale first: improve the estimate,
 representation, reduction, algorithm, or backend so the motivating valid
-request succeeds. Do not turn a cheaply executable request into a permanent
-rejection regression. Follow the
+request succeeds. Raising a cap is appropriate when the existing implementation
+already supports the larger workload and its work, intermediate growth, and
+output remain bounded. Otherwise improve the implementation before raising it.
+Do not turn a cheaply executable request into a permanent rejection regression.
+Follow the
 [execution-envelope review](docs/reference/public-operation-admission.md#execution-envelope-review)
 before retaining a limit.
 
@@ -46,6 +56,11 @@ new review artifact or framework. The
 [test evidence guidance](docs/reference/testing-strategy.md#evidence-plans-for-exact-operations),
 and [backend contract](docs/reference/mathematical-backends.md#common-adapter-obligations)
 define these checks.
+
+Review the exact changed paths and the tests that exercise them. A green suite
+or review summary is evidence only for the cases it actually covers; a small
+catalog example does not establish a newly widened boundary. In parallel work,
+assign one writer per path and review the combined final diff before validation.
 
 During edits, run the changed owner's tests first, including relevant composition
 tests when the change crosses owners. Use the existing focused commands:

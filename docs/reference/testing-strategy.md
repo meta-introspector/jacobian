@@ -176,6 +176,21 @@ and verify both the result and retained mathematical context, such as ambient
 axes or source-coordinate mappings. Larger input size alone must not imply
 greater computational cost.
 
+Use the **same newly accepted result** for the boundary round trip. For example,
+if inertia admission grows from dimension four to sixteen, computing the
+16-dimensional result and round-tripping a separate 2-dimensional example is
+insufficient. Round-trip the 16-dimensional result and check it with the actual
+consumer. Trusted kernel construction can bypass model validation, so a correct
+native result may still violate the published result schema. Keep canonical
+carrier limits separate from operation budgets instead of copying a kernel cap
+into result fields.
+
+For a resource-refusal regression, use a mathematically valid source or true
+serialized claim that exceeds the admitted work or growth bound. Verify that
+the public wrapper and consumer preserve the resource error. Returning `False`
+would incorrectly refute the claim; relabeling it as invalid mathematics would
+hide the actual limitation.
+
 A review finding is closed only when the behavior is fixed at the public
 boundary and a behavioral regression proves the failure can no longer recur.
 For findings about malformed or over-sized input, cover the smallest valid

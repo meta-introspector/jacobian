@@ -201,6 +201,15 @@ spelling and digit limits. For example, a three-digit envelope accepts `"999"`
 and `"-999"`, but rejects `"9999"`. A four-character maximum alone does not
 express that rule: the extra character is allowed only for the minus sign.
 
+Numeric constraints on the decoded Python integer do not automatically constrain
+its JSON string schema. For example, a positive exact count needs a wire pattern
+that excludes `"0"` and `"-1"`; a numeric lower-bound annotation alone is
+insufficient. Test the actual published model schema with a JSON Schema validator
+and test the same payloads with the owning JSON decoder. For a positive count,
+both must accept `"1"` and reject `"0"`, `"-1"`, `"01"`, and a trailing newline.
+Keep the existing exact-integer carrier and make its field-specific wire
+constraints explicit; do not introduce a second integer value type.
+
 Keep three limits distinct: the interoperable JSON-number range, the structural
 cost of parsing and formatting a decimal value, and the operation's admitted
 arithmetic work. Python's
